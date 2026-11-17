@@ -1,0 +1,16 @@
+{
+  "id": "excel_consolidator",
+  "name": "Excel Consolidator",
+  "version": "1.0.0",
+  "author": "Vishwas Upponi",
+  "author_url": "https://vishwasupponi.blogspot.com/links",
+  "category": "Data Tools",
+  "icon": "📊",
+  "repo": "vtx-excel-consolidator",
+  "entrypoint": "entrypoint.py",
+  "entry_class": "ExcelConsolidatorModule",
+  "ui_page": "web_ui/excel_consolidator.html",
+  "page_key": "excel_consolidator",
+  "description": "Merges multiple Excel files and sheets into a single consolidated master spreadsheet.",
+  "dependencies": ["openpyxl>=3.1.0", "pandas>=2.0.0"]
+}

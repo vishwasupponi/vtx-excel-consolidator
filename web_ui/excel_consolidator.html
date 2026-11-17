@@ -1,0 +1,233 @@
+<div class="module-view-container">
+  <!-- Title Section -->
+  <div class="module-view-header">
+    <h1 class="module-view-title">EXCEL CONSOLIDATOR</h1>
+    <a href="javascript:void(0)" class="module-instructions-link" onclick="openInstructions()">
+      📖 Click here to view the Instructions
+    </a>
+  </div>
+
+  <!-- 1. Files Selection Card -->
+  <div class="original-card module-section-card">
+    <div style="text-align: center; margin-bottom: 14px;">
+      <button id="btn-select-excel" class="btn-pill btn-pill-primary" onclick="selectExcelFiles()">
+        Select Excel Files
+      </button>
+    </div>
+    <div id="excel-files-box" class="module-display-box" style="height: 140px;">
+      No files selected. Click 'Select Excel Files' above.
+    </div>
+  </div>
+
+  <!-- 2. Sheet Preview Card -->
+  <div class="original-card module-section-card">
+    <div style="text-align: center; margin-bottom: 14px;">
+      <button id="btn-preview-sheets" class="btn-pill btn-pill-secondary" disabled onclick="previewExcelSheets()">
+        Preview Unique Sheet Names
+      </button>
+    </div>
+    <div id="excel-sheets-box" class="module-display-box" style="height: 120px;">
+      Sheet preview will appear here after clicking Preview.
+    </div>
+  </div>
+
+  <!-- 3. Progress Bar & Action Buttons Container -->
+  <div class="module-run-container">
+    <!-- Visual Progress Bar (10px pill matching CTkProgressBar) -->
+    <div id="excel-progress-wrap" style="display: none; max-width: 480px; margin: 0 auto 16px auto;">
+      <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+        <span id="excel-progress-text">Consolidating workbooks...</span>
+        <span id="excel-progress-pct">0%</span>
+      </div>
+      <div style="width: 100%; height: 10px; border-radius: 5px; background: var(--bg-card); border: 1px solid var(--border-card); overflow: hidden; padding: 1px; box-sizing: border-box;">
+        <div id="excel-progress-bar" style="width: 0%; height: 100%; border-radius: 4px; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); transition: width 0.25s ease;"></div>
+      </div>
+    </div>
+
+    <div id="excel-run-status" class="module-status-italic" style="display: none; margin-bottom: 14px;"></div>
+
+    <div style="display: flex; gap: 14px; justify-content: center; align-items: center; flex-wrap: wrap;">
+      <button id="btn-consolidate" class="module-btn-run" disabled onclick="startExcelConsolidation()">
+        Consolidate Files
+      </button>
+      <button id="btn-clear-excel" class="btn-pill btn-pill-secondary" style="height: 46px; border-radius: 23px;" onclick="clearExcelAll()">
+        Clear
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Global progress listener called from Python backend (persists across tab switches)
+window.onExcelProgress = function(pct) {
+  if (window.VERTEX_STATE && window.VERTEX_STATE.excel_consolidator) {
+    const st = window.VERTEX_STATE.excel_consolidator;
+    st.progressPct = pct;
+  }
+  const wrap = document.getElementById('excel-progress-wrap');
+  const bar = document.getElementById('excel-progress-bar');
+  const pctText = document.getElementById('excel-progress-pct');
+  const label = document.getElementById('excel-progress-text');
+  
+  if (wrap) wrap.style.display = 'block';
+  if (bar) bar.style.width = pct + '%';
+  if (pctText) pctText.innerText = pct + '%';
+  if (label) label.innerText = pct >= 100 ? "Finalizing workbook..." : "Consolidating files...";
+};
+
+function renderExcelConsolidatorState() {
+  const st = window.VERTEX_STATE ? window.VERTEX_STATE.excel_consolidator : null;
+  if (!st) return;
+
+  const btnSelect = document.getElementById('btn-select-excel');
+  const btnPreview = document.getElementById('btn-preview-sheets');
+  const btnConsolidate = document.getElementById('btn-consolidate');
+  const btnClear = document.getElementById('btn-clear-excel');
+  const filesBox = document.getElementById('excel-files-box');
+  const sheetsBox = document.getElementById('excel-sheets-box');
+  const wrap = document.getElementById('excel-progress-wrap');
+  const bar = document.getElementById('excel-progress-bar');
+  const pctText = document.getElementById('excel-progress-pct');
+  const status = document.getElementById('excel-run-status');
+
+  if (st.selectedFiles && st.selectedFiles.length > 0) {
+    filesBox.innerHTML = st.selectedFiles.map((f, i) => `[${i+1}] ${f.split(/[\\\\/]/).pop()}  -  (${f})`).join('<br>');
+    if (btnPreview) btnPreview.disabled = st.isRunning;
+    if (btnConsolidate) btnConsolidate.disabled = st.isRunning;
+  } else {
+    filesBox.innerText = "No files selected. Click 'Select Excel Files' above.";
+    if (btnPreview) btnPreview.disabled = true;
+    if (btnConsolidate) btnConsolidate.disabled = true;
+  }
+
+  if (st.uniqueSheets && st.uniqueSheets.length > 0) {
+    sheetsBox.innerHTML = `Discovered ${st.uniqueSheets.length} unique sheet${st.uniqueSheets.length > 1 ? 's' : ''} across ${st.selectedFiles.length} file${st.selectedFiles.length > 1 ? 's' : ''}:<br>` + 
+      st.uniqueSheets.map(s => `• ${escapeHtml(s)}`).join('<br>');
+  } else if (st.selectedFiles && st.selectedFiles.length > 0) {
+    sheetsBox.innerText = "Click 'Preview Unique Sheet Names' above to inspect sheets across all workbooks.";
+  } else {
+    sheetsBox.innerText = "Sheet preview will appear here after clicking Preview.";
+  }
+
+  if (st.isRunning) {
+    if (btnSelect) btnSelect.disabled = true;
+    if (btnPreview) btnPreview.disabled = true;
+    if (btnConsolidate) btnConsolidate.disabled = true;
+    if (btnClear) btnClear.disabled = true;
+    if (wrap) wrap.style.display = 'block';
+    if (bar) bar.style.width = (st.progressPct || 0) + '%';
+    if (pctText) pctText.innerText = (st.progressPct || 0) + '%';
+  } else {
+    if (btnSelect) btnSelect.disabled = false;
+    if (btnClear) btnClear.disabled = false;
+  }
+
+  if (status) {
+    if (st.statusHtml) {
+      status.style.display = 'block';
+      status.style.color = st.statusColor || '#10B981';
+      status.innerHTML = st.statusHtml;
+    } else if (st.statusText) {
+      status.style.display = 'block';
+      status.style.color = st.statusColor || '#EF4444';
+      status.innerText = st.statusText;
+    } else {
+      status.style.display = 'none';
+    }
+  }
+}
+
+async function selectExcelFiles() {
+  const st = window.VERTEX_STATE.excel_consolidator;
+  if (st.isRunning) return;
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_excel_files) {
+    const files = await window.pywebview.api.pick_excel_files();
+    if (files && files.length > 0) {
+      st.selectedFiles = files;
+      st.uniqueSheets = [];
+      st.statusHtml = '';
+      st.statusText = '';
+      renderExcelConsolidatorState();
+    }
+  }
+}
+
+async function previewExcelSheets() {
+  const st = window.VERTEX_STATE.excel_consolidator;
+  if (st.isRunning || !st.selectedFiles || st.selectedFiles.length === 0) return;
+
+  const box = document.getElementById('excel-sheets-box');
+  box.innerHTML = "<em>Inspecting workbook sheets...</em>";
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.get_unique_excel_sheets) {
+    try {
+      const sheets = await window.pywebview.api.get_unique_excel_sheets(st.selectedFiles);
+      st.uniqueSheets = sheets || [];
+      renderExcelConsolidatorState();
+    } catch(e) {
+      box.innerText = `Error reading sheets: ${e}`;
+    }
+  }
+}
+
+async function startExcelConsolidation() {
+  const st = window.VERTEX_STATE.excel_consolidator;
+  if (st.isRunning || !st.selectedFiles || st.selectedFiles.length === 0) return;
+  
+  if (window.pywebview && window.pywebview.api) {
+    const outPath = await window.pywebview.api.pick_save_excel_path("Consolidated_Output.xlsx");
+    if (!outPath) return;
+
+    st.isRunning = true;
+    st.progressPct = 0;
+    st.statusHtml = '';
+    st.statusText = '';
+    renderExcelConsolidatorState();
+
+    try {
+      const res = await window.pywebview.api.run_excel_consolidation(st.selectedFiles, st.uniqueSheets, outPath);
+      st.isRunning = false;
+      if (res && res.success) {
+        st.progressPct = 100;
+        st.statusColor = '#10B981';
+        st.statusHtml = `✓ Successfully consolidated ${st.selectedFiles.length} files into: <strong>${escapeHtml(res.path)}</strong>`;
+      } else {
+        st.statusColor = '#EF4444';
+        st.statusText = `⚠ Consolidation Error: ${res ? res.error : 'Unknown error'}`;
+      }
+    } catch(e) {
+      st.isRunning = false;
+      st.statusColor = '#EF4444';
+      st.statusText = `⚠ Consolidation Error: ${e}`;
+    } finally {
+      renderExcelConsolidatorState();
+    }
+  }
+}
+
+function clearExcelAll() {
+  const st = window.VERTEX_STATE.excel_consolidator;
+  if (st.isRunning) return;
+
+  st.selectedFiles = [];
+  st.uniqueSheets = [];
+  st.progressPct = 0;
+  st.statusHtml = '';
+  st.statusText = '';
+  renderExcelConsolidatorState();
+}
+
+function openInstructions() {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.open_instructions('excel_consolidator');
+  }
+}
+
+function escapeHtml(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Initial mount render
+renderExcelConsolidatorState();
+</script>
